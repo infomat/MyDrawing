@@ -32,6 +32,8 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -389,30 +391,39 @@ public class MainActivity extends Activity implements OnClickListener {
         AlertDialog.Builder saveDialog = new AlertDialog.Builder(this);
         saveDialog.setTitle("Save drawing");
         saveDialog.setMessage("Save drawing to device Gallery?");
-        saveDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener(){
-            public void onClick(DialogInterface dialog, int which){
+        saveDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
                 //save drawing
-                drawView.setDrawingCacheEnabled(true);
-                String imgSaved = MediaStore.Images.Media.insertImage(
-                    getContentResolver(), drawView.getDrawingCache(),
-                        mCurrentPhotoPath , "drawing");
-//                String imgSaved = MediaStore.Images.Media.insertImage(
-//                        getContentResolver(), drawView.getDrawingCache(),
-//                        UUID.randomUUID().toString()+".png", "drawing");
-                if(imgSaved!=null){
+                FileOutputStream fos=null;
+                try {
+                    drawView.setDrawingCacheEnabled(true);
+                    fos = new FileOutputStream(new File(mCurrentPhotoPath));
+                    Bitmap bitmap = drawView.getDrawingCache();
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+                    fos.flush();
+                    fos.close();
+                } catch (FileNotFoundException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+
+
+                if (fos != null) {
                     Toast savedToast = Toast.makeText(getApplicationContext(),
                             "Drawing saved to Gallery!", Toast.LENGTH_SHORT);
                     savedToast.show();
-                } else{
+                } else {
                     Toast unsavedToast = Toast.makeText(getApplicationContext(),
                             "Oops! Image could not be saved.", Toast.LENGTH_SHORT);
                     unsavedToast.show();
                 }
                 drawView.destroyDrawingCache();
             }
-        });
-        saveDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener(){
-            public void onClick(DialogInterface dialog, int which){
+        }).setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();
             }
         });

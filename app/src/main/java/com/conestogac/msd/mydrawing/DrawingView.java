@@ -1,11 +1,11 @@
 package com.conestogac.msd.mydrawing;
+
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PorterDuff;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.TypedValue;
@@ -51,7 +51,6 @@ public class DrawingView extends View {
         drawPaint.setStyle(Paint.Style.STROKE);
         drawPaint.setStrokeJoin(Paint.Join.ROUND);
         drawPaint.setStrokeCap(Paint.Cap.ROUND);
-
         canvasPaint = new Paint(Paint.DITHER_FLAG);
 
         brushSize = getResources().getInteger(R.integer.medium_size);
@@ -79,8 +78,6 @@ public class DrawingView extends View {
         canvas.drawBitmap(canvasBitmap, 0, 0, canvasPaint);
         canvas.drawPath(drawPath, drawPaint);
         Log.d(TAG, "onDraw");
-
-
 
  /*       } else {
             drawPaint.setColor(Color.BLACK);
@@ -165,7 +162,9 @@ public class DrawingView extends View {
   //      else drawPaint.setXfermode(null);
     }
     public void startNew(){
-        drawCanvas.drawColor(0, PorterDuff.Mode.CLEAR);
+        drawCanvas.drawARGB(0xff, 0xff, 0xff, 0xff);
+        // When camera is taken and back, it is filled with black
+        // drawCanvas.drawColor(0, PorterDuff.Mode.CLEAR);
         invalidate();
     }
 }
