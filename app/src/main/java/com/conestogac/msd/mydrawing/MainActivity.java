@@ -179,7 +179,7 @@ public class MainActivity extends Activity implements OnClickListener {
     {
         isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_CAM);
     }
-    
+
 
     private File getAlbumDir() {
         File storageDir = null;
