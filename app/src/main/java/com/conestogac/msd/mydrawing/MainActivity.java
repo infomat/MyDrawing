@@ -11,10 +11,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
-import android.graphics.Paint;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -41,7 +37,8 @@ import java.util.List;
 
 public class MainActivity extends Activity implements OnClickListener {
     private static final String TAG = "MainActivity";
-    private static final int REQUEST_EXTERNAL_STORAGE =1;
+    private static final int REQUEST_EXTERNAL_STORAGE_CAM = 0;
+    private static final int REQUEST_EXTERNAL_STORAGE_IMG = 1;
     private static String[] PERMISSIONS_EXT_STORAGE = {Manifest.permission.WRITE_EXTERNAL_STORAGE};
     private DrawingView drawView;
     private float smallBrush, mediumBrush, largeBrush;
@@ -111,7 +108,7 @@ public class MainActivity extends Activity implements OnClickListener {
         newBtn.setOnClickListener(this);
         saveBtn = (ImageButton)findViewById(R.id.save_btn);
         saveBtn.setOnClickListener(this);
-    }
+     }
 
 
     @Override
@@ -180,25 +177,9 @@ public class MainActivity extends Activity implements OnClickListener {
 
     public void takePhoto(View view)
     {
-        isStoragePermissionGranted();
+        isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_CAM);
     }
-
-    public Bitmap toGrayscale(Bitmap bmpOriginal)
-    {
-        int width, height;
-        height = bmpOriginal.getHeight();
-        width = bmpOriginal.getWidth();
-
-        Bitmap bmpGrayscale = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmpGrayscale);
-        Paint paint = new Paint();
-        ColorMatrix cm = new ColorMatrix();
-        cm.setSaturation(0);
-        ColorMatrixColorFilter f = new ColorMatrixColorFilter(cm);
-        paint.setColorFilter(f);
-        c.drawBitmap(bmpOriginal, 0, 0, paint);
-        return bmpGrayscale;
-    }
+    
 
     private File getAlbumDir() {
         File storageDir = null;
@@ -283,16 +264,22 @@ public class MainActivity extends Activity implements OnClickListener {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
          switch(actionCode) {
             case ACTION_TAKE_PHOTO_B:
-            File f;
-            try {
-                    f = createImageFile();
-                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
-                    Log.d(TAG, "dispatchTakePictureIntent");
-            } catch (IOException e) {
-                e.printStackTrace();
-                f = null;
-                mCurrentPhotoPath = null;
-            }
+
+                Log.i(TAG, "Now, REQUEST_EXTERNAL_STORAGE is granted ");
+                if (mCurrentPhotoPath == null) {
+                    File f;
+                    try {
+                        f = createImageFile();
+                        takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
+                        Log.d(TAG, "dispatchTakePictureIntent");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        f = null;
+                        mCurrentPhotoPath = null;
+                        Log.e(TAG, "dispatchTakePictureIntent something wrong!!");
+                    }
+                }
+
 			break;
 
             default:
@@ -352,11 +339,13 @@ public class MainActivity extends Activity implements OnClickListener {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         Log.d(TAG, "onRequestPermissionsResult");
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_EXTERNAL_STORAGE) {
-            if (grantResults.length == 1 &&
-                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.i(TAG,"Now, REQUEST_EXTERNAL_STORAGE is granted ");
-                dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+        if ((requestCode == REQUEST_EXTERNAL_STORAGE_CAM) ||(requestCode == REQUEST_EXTERNAL_STORAGE_IMG)) {
+            if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (requestCode == REQUEST_EXTERNAL_STORAGE_CAM) {
+                    dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+                } else if (requestCode == REQUEST_EXTERNAL_STORAGE_IMG){
+                    SaveImage();
+                }
             } else {
                 Snackbar.make(curLayout, R.string.permission_extsto_nok,
                         Snackbar.LENGTH_SHORT).show();
@@ -393,34 +382,12 @@ public class MainActivity extends Activity implements OnClickListener {
         saveDialog.setMessage("Save drawing to device Gallery?");
         saveDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
-                //save drawing
-                FileOutputStream fos=null;
-                try {
-                    drawView.setDrawingCacheEnabled(true);
-                    fos = new FileOutputStream(new File(mCurrentPhotoPath));
-                    Bitmap bitmap = drawView.getDrawingCache();
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
-                    fos.flush();
-                    fos.close();
-                } catch (FileNotFoundException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-
-
-                if (fos != null) {
-                    Toast savedToast = Toast.makeText(getApplicationContext(),
-                            "Drawing saved to Gallery!", Toast.LENGTH_SHORT);
-                    savedToast.show();
+                //In case of no camera image exists -> obtain permission & make new file
+                if (mCurrentPhotoPath == null) {
+                    isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_IMG);
                 } else {
-                    Toast unsavedToast = Toast.makeText(getApplicationContext(),
-                            "Oops! Image could not be saved.", Toast.LENGTH_SHORT);
-                    unsavedToast.show();
+                    SaveImage();
                 }
-                drawView.destroyDrawingCache();
             }
         }).setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
@@ -428,6 +395,49 @@ public class MainActivity extends Activity implements OnClickListener {
             }
         });
         saveDialog.show();
+    }
+
+    private void SaveImage() {
+        FileOutputStream fos=null;
+        Log.d(TAG, "SaveImage()- mCurrentPhotoPath: "+mCurrentPhotoPath);
+        //in case of with out camera taken, no file is created
+        if (mCurrentPhotoPath == null) {
+            File f;
+            try {
+                f = createImageFile();
+                Log.d(TAG, "SaveImage() new file is created"+mCurrentPhotoPath);
+            } catch (IOException e) {
+                e.printStackTrace();
+                f = null;
+                mCurrentPhotoPath = null;
+                Log.e(TAG, "SaveImage() something wrong");
+            }
+        }
+
+        try {
+            drawView.setDrawingCacheEnabled(true);
+            fos = new FileOutputStream(new File(mCurrentPhotoPath));
+            Bitmap bitmap = drawView.getDrawingCache();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+            fos.flush();
+            fos.close();
+            Toast savedToast = Toast.makeText(getApplicationContext(),
+                    "Drawing saved to Gallery!", Toast.LENGTH_SHORT);
+            savedToast.show();
+        } catch (FileNotFoundException e) {
+            // TODO Auto-generated catch block
+            Toast unsavedToast = Toast.makeText(getApplicationContext(),
+                    "Oops! Image could not be saved.", Toast.LENGTH_SHORT);
+            unsavedToast.show();
+            e.printStackTrace();
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            Toast unsavedToast = Toast.makeText(getApplicationContext(),
+                    "Oops! Image could not be saved.", Toast.LENGTH_SHORT);
+            unsavedToast.show();
+            e.printStackTrace();
+        }
+        drawView.destroyDrawingCache();
     }
 
     private void ProcessNew() {
@@ -531,21 +541,25 @@ public class MainActivity extends Activity implements OnClickListener {
         brushDialog.show();
     }
 
-    public  void isStoragePermissionGranted() {
+    public  void isStoragePermissionGranted(int REQ_CODE) {
         if (Build.VERSION.SDK_INT >= 23) {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED) {
-                Log.v(TAG,"Permission is already granted");
-                dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+                Log.v(TAG, "Permission is already granted");
+                if (REQ_CODE == REQUEST_EXTERNAL_STORAGE_CAM) {
+                    dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+                } else if (REQ_CODE == REQUEST_EXTERNAL_STORAGE_IMG){
+                    SaveImage();
+                }
             } else {
                 Log.v(TAG, "Show Rationale");
                 if (ActivityCompat.shouldShowRequestPermissionRationale(this,
                         Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                     Log.i(TAG, "Displaying external storage permission rationale to provide additional context.");
-                    ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQUEST_EXTERNAL_STORAGE);
+                    ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQ_CODE);
                 } else {
                     Log.v(TAG, "Permission is revoked");
-                    ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQUEST_EXTERNAL_STORAGE);
+                    ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQ_CODE);
                 }
             }
         }
