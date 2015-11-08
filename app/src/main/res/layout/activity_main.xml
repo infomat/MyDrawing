@@ -12,6 +12,12 @@
         android:layout_gravity="center"
         android:orientation="horizontal" >
         <ImageButton
+            android:id="@+id/new_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="fill_parent"
+            android:contentDescription="@string/start_new"
+            android:src="@drawable/new_pic" />
+        <ImageButton
             android:id="@+id/camera_btn"
             android:layout_width="wrap_content"
             android:layout_height="fill_parent"
@@ -19,11 +25,12 @@
             android:onClick="takePhoto"
             android:src="@drawable/camera" />
         <ImageButton
-            android:id="@+id/new_btn"
+            android:id="@+id/gallery_btn"
             android:layout_width="wrap_content"
             android:layout_height="fill_parent"
-            android:contentDescription="@string/start_new"
-            android:src="@drawable/new_pic" />
+            android:contentDescription="@string/gallery"
+            android:onClick="gotoGallery"
+            android:src="@drawable/gallery" />
         <ImageButton
             android:id="@+id/draw_btn"
             android:layout_width="wrap_content"

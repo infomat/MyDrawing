@@ -4,11 +4,10 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
@@ -33,12 +32,12 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 
 public class MainActivity extends Activity implements OnClickListener {
     private static final String TAG = "MainActivity";
     private static final int REQUEST_EXTERNAL_STORAGE_CAM = 0;
     private static final int REQUEST_EXTERNAL_STORAGE_IMG = 1;
+    private static final int REQUEST_EXTERNAL_STORAGE_GAL = 2;
     private static String[] PERMISSIONS_EXT_STORAGE = {Manifest.permission.WRITE_EXTERNAL_STORAGE};
     private DrawingView drawView;
     private float smallBrush, mediumBrush, largeBrush;
@@ -46,8 +45,10 @@ public class MainActivity extends Activity implements OnClickListener {
     //final EditText et = (EditText) findViewById(R.id.ed_text);
     private static final String JPEG_FILE_PREFIX = "IMG_";
     private static final String JPEG_FILE_SUFFIX = ".jpg";
-    private static final int REQUEST_IMAGE_CAPTURE = 1;
+
     private static final int ACTION_TAKE_PHOTO_B = 1;
+    private static final int ACTION_SELECT_IMAGE = 2;
+
     private static final String BITMAP_STORAGE_KEY = "viewbitmap";
     private static final String IMAGEVIEW_VISIBILITY_STORAGE_KEY = "imageviewvisibility";
     private ImageView mImageView;
@@ -126,18 +127,57 @@ public class MainActivity extends Activity implements OnClickListener {
         return super.onOptionsItemSelected(item);
     }
 
-    public void paintClicked(View view){
-        //use chosen color
-        if(view!=currPaint){
-    //update color
-            ImageButton imgView = (ImageButton)view;
-            String color = view.getTag().toString();
-            drawView.setColor(color);
-            imgView.setImageDrawable(getResources().getDrawable(R.drawable.paint_pressed));
-            currPaint.setImageDrawable(getResources().getDrawable(R.drawable.paint));
-            currPaint=(ImageButton)view;
-            drawView.setErase(false);
-            drawView.setBrushSize(drawView.getLastBrushSize());
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data)
+    {
+        Log.d(TAG, "onActivityResult");
+        Log.d(TAG, "requestCode: " + requestCode + "resultCode: " + resultCode);
+        if(requestCode == ACTION_TAKE_PHOTO_B) {
+            handleBigCameraPhoto();
+        } else if (requestCode == ACTION_SELECT_IMAGE) {
+            Log.d(TAG, "From Gallery");
+            handleSelectedImage(data);
+        }
+    }
+
+
+    // Some lifecycle callbacks so that the image can survive orientation change
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putParcelable(BITMAP_STORAGE_KEY, mImageBitmap);
+        outState.putBoolean(IMAGEVIEW_VISIBILITY_STORAGE_KEY, (mImageBitmap != null));
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        mImageBitmap = savedInstanceState.getParcelable(BITMAP_STORAGE_KEY);
+        mImageView.setImageBitmap(mImageBitmap);
+        mImageView.setVisibility(
+                savedInstanceState.getBoolean(IMAGEVIEW_VISIBILITY_STORAGE_KEY) ?
+                        ImageView.VISIBLE : ImageView.INVISIBLE
+        );
+    }
+    //Form Marshmallow, External Storage Permission si not possible to use at manifest file
+    //So, runtime requesting user grant for permission will be done, and then this callback will be called
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        Log.d(TAG, "onRequestPermissionsResult");
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (requestCode == REQUEST_EXTERNAL_STORAGE_CAM) {
+                dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+            } else if (requestCode == REQUEST_EXTERNAL_STORAGE_IMG){
+                SaveImage();
+            } else if (requestCode == REQUEST_EXTERNAL_STORAGE_GAL) {
+                setIntentGallery();
+            }
+        } else {
+            Snackbar.make(curLayout, R.string.permission_extsto_nok,
+                    Snackbar.LENGTH_SHORT).show();
         }
     }
 
@@ -146,6 +186,18 @@ public class MainActivity extends Activity implements OnClickListener {
 //respond to clicks
         switch (view.getId())
         {
+            case R.id.new_btn:
+                Log.d(TAG, "newbtn");
+                ProcessNew();
+                break;
+            case R.id.camera_btn:
+                Log.d(TAG, "camerabtn");
+                takePhoto(view);
+                break;
+            case R.id.gallery_btn:
+                Log.d(TAG, "gallerybtn");
+                gotoGallery(view);
+                break;
             case R.id.draw_btn:
                 Log.d(TAG, "drawbtn");
                 ProcessDraw();
@@ -158,14 +210,6 @@ public class MainActivity extends Activity implements OnClickListener {
                 Log.d(TAG, "erasebtn");
                 ProcessErase();
                 break;
-            case R.id.new_btn:
-                Log.d(TAG, "newbtn");
-                ProcessNew();
-                break;
-            case R.id.camera_btn:
-                Log.d(TAG, "camerabtn");
-                takePhoto(view);
-                break;
             case R.id.save_btn:
                 Log.d(TAG, "savebtn");
                 ProcessSave();
@@ -175,206 +219,121 @@ public class MainActivity extends Activity implements OnClickListener {
         }
     }
 
+    private void ProcessNew() {
+        //new button
+        AlertDialog.Builder newDialog = new AlertDialog.Builder(this);
+        newDialog.setTitle("New drawing");
+        newDialog.setMessage("Start new drawing (you will lose the current drawing)?");
+        newDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener(){
+            public void onClick(DialogInterface dialog, int which){
+                drawView.startNew();
+                dialog.dismiss();
+            }
+        });
+        newDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+        newDialog.show();
+    }
+
     public void takePhoto(View view)
     {
         isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_CAM);
     }
 
-
-    private File getAlbumDir() {
-        File storageDir = null;
-
-        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
-
-            storageDir = mAlbumStorageDirFactory.getAlbumStorageDir(getAlbumName());
-            Log.d(TAG, "getAlbumDir: "+storageDir);
-            if (storageDir != null) {
-                if (! storageDir.mkdirs()) {
-                    if (! storageDir.exists()){
-                        Log.d(TAG, "failed to create directory");
-                        return null;
-                    }
-                }
+    public void gotoGallery(View v) {
+        isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_GAL);
+    }
+    private void setIntentGallery(){
+        Intent goGalleryIntent = new Intent(Intent.ACTION_PICK);
+        goGalleryIntent.setType(android.provider.MediaStore.Images.Media.CONTENT_TYPE);
+        goGalleryIntent.setData(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        startActivityForResult(Intent.createChooser(goGalleryIntent, "Select File"), ACTION_SELECT_IMAGE);
+    }
+    private void ProcessDraw() {
+        //draw button clicked
+        final Dialog brushDialog = new Dialog(this);
+        brushDialog.setTitle("Brush size:");
+        brushDialog.setContentView(R.layout.brush_chooser);
+        ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
+        smallBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setBrushSize(smallBrush);
+                drawView.setLastBrushSize(smallBrush);
+                drawView.setErase(false);
+                brushDialog.dismiss();
             }
+        });
 
-        } else {
-            Log.d(TAG, "External storage is not mounted READ/WRITE.");
-        }
-
-        return storageDir;
-    }
-
-    private File createImageFile() throws IOException {
-		// Create an image file name
-		String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-		String imageFileName = JPEG_FILE_PREFIX + timeStamp + "_";
-        Log.d(TAG, "createImageFile: "+imageFileName);
-
-		File imageF = File.createTempFile(imageFileName, JPEG_FILE_SUFFIX, getAlbumDir());
-        mCurrentPhotoPath = imageF.getAbsolutePath();
-		return imageF;
-	}
-
-   private boolean setPic() {
-		/* There isn't enough memory to open up more than a couple camera photos */
-		/* So pre-scale the target bitmap into which the file is decoded */
-
-		/* Get the size``` of the ImageView */
-		int targetW = drawView.getWidth();
-		int targetH = drawView.getHeight();
-
-		/* Get the size of the image */
-		BitmapFactory.Options bmOptions = new BitmapFactory.Options();
-		bmOptions.inJustDecodeBounds = true;
-		BitmapFactory.decodeFile(mCurrentPhotoPath, bmOptions);
-
-        //in case of clear without taking photo
-        if (bmOptions.outMimeType == null) return false;
-
-		int photoW = bmOptions.outWidth;
-		int photoH = bmOptions.outHeight;
-		
-		/* Figure out which way needs to be reduced less */
-		int scaleFactor = 1;
-		if ((targetW > 0) || (targetH > 0)) {
-			scaleFactor = Math.min(photoW/targetW, photoH/targetH);	
-		}
-       Log.d(TAG, "Resizing targetW: "+targetW+ "photoW: "+photoW+"targetH"+targetH+ "photoH: "+photoH  );
-		/* Set bitmap options to scale the image decode target */
-		bmOptions.inJustDecodeBounds = false;
-		bmOptions.inSampleSize = scaleFactor;
-		bmOptions.inPurgeable = true;
-
-		/* Decode the JPEG file into a Bitmap */
-		Bitmap bitmap = BitmapFactory.decodeFile(mCurrentPhotoPath, bmOptions);
-        drawView.setCanvasBitmap(bitmap);
-       return true;
-	}
-
-    private void galleryAddPic() {
-        Intent mediaScanIntent = new Intent("android.intent.action.MEDIA_SCANNER_SCAN_FILE");
-        File f = new File(mCurrentPhotoPath);
-        Uri contentUri = Uri.fromFile(f);
-        mediaScanIntent.setData(contentUri);
-        this.sendBroadcast(mediaScanIntent);
-        Log.d(TAG, "galleryAddPic: " + mCurrentPhotoPath);
-	}
-
-    private void dispatchTakePictureIntent(int actionCode) {
-        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-         switch(actionCode) {
-            case ACTION_TAKE_PHOTO_B:
-
-                Log.i(TAG, "Now, REQUEST_EXTERNAL_STORAGE is granted ");
-                if (mCurrentPhotoPath == null) {
-                    File f;
-                    try {
-                        f = createImageFile();
-                        takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
-                        Log.d(TAG, "dispatchTakePictureIntent");
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        f = null;
-                        mCurrentPhotoPath = null;
-                        Log.e(TAG, "dispatchTakePictureIntent something wrong!!");
-                    }
-                }
-
-			break;
-
-            default:
-                break;
-		} // switch
-
-		startActivityForResult(takePictureIntent, actionCode);
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data)
-    {
-        Log.d(TAG, "onActivityResult");
-        Log.d(TAG, "requestCode: " + requestCode + "resultCode: " + resultCode);
-        if(requestCode == ACTION_TAKE_PHOTO_B) {
-            handleBigCameraPhoto();
-        }
-    }
-    
-    private void handleSmallCameraPhoto(Intent intent) {
-		Bundle extras = intent.getExtras();
-		mImageBitmap = (Bitmap) extras.get("data");
-		mImageView.setImageBitmap(mImageBitmap);
-		mImageView.setVisibility(View.VISIBLE);
-	}
-
-	private void handleBigCameraPhoto() {
-		if (mCurrentPhotoPath != null) {
-            Log.d(TAG, "handleBigCameraPhoto");
-            if (setPic() == true) {
-                galleryAddPic();
+        ImageButton mediumBtn = (ImageButton)brushDialog.findViewById(R.id.medium_brush);
+        mediumBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setBrushSize(mediumBrush);
+                drawView.setLastBrushSize(mediumBrush);
+                drawView.setErase(false);
+                brushDialog.dismiss();
             }
-		}
-	}
-    
-    // Some lifecycle callbacks so that the image can survive orientation change
-	@Override
-	protected void onSaveInstanceState(Bundle outState) {
-		outState.putParcelable(BITMAP_STORAGE_KEY, mImageBitmap);
-		outState.putBoolean(IMAGEVIEW_VISIBILITY_STORAGE_KEY, (mImageBitmap != null));
-		super.onSaveInstanceState(outState);
-	}
+        });
 
-	@Override
-	protected void onRestoreInstanceState(Bundle savedInstanceState) {
-		super.onRestoreInstanceState(savedInstanceState);
-		mImageBitmap = savedInstanceState.getParcelable(BITMAP_STORAGE_KEY);
-		mImageView.setImageBitmap(mImageBitmap);
-		mImageView.setVisibility(
-                savedInstanceState.getBoolean(IMAGEVIEW_VISIBILITY_STORAGE_KEY) ?
-                        ImageView.VISIBLE : ImageView.INVISIBLE
-        );
-	}
-    //Form Marshmallow, External Storage Permission si not possible to use at manifest file
-    //So, runtime requesting user grant for permission will be done, and then this callback will be called
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        Log.d(TAG, "onRequestPermissionsResult");
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if ((requestCode == REQUEST_EXTERNAL_STORAGE_CAM) ||(requestCode == REQUEST_EXTERNAL_STORAGE_IMG)) {
-            if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                if (requestCode == REQUEST_EXTERNAL_STORAGE_CAM) {
-                    dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
-                } else if (requestCode == REQUEST_EXTERNAL_STORAGE_IMG){
-                    SaveImage();
-                }
-            } else {
-                Snackbar.make(curLayout, R.string.permission_extsto_nok,
-                        Snackbar.LENGTH_SHORT).show();
+        ImageButton largeBtn = (ImageButton)brushDialog.findViewById(R.id.large_brush);
+        largeBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setBrushSize(largeBrush);
+                drawView.setLastBrushSize(largeBrush);
+                drawView.setErase(false);
+                brushDialog.dismiss();
             }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
+        });
+        brushDialog.show();
     }
-/**
-	 * Indicates whether the specified action can be used as an intent. This
-	 * method queries the package manager for installed packages that can
-	 * respond to an intent with the specified action. If no suitable package is
-	 * found, this method returns false.
-	 * http://android-developers.blogspot.com/2009/01/can-i-use-this-intent.html
-	 *
-	 * @param context The application's environment.
-	 * @param action The Intent action to check for availability.
-	 *
-	 * @return True if an Intent with the specified action can be sent and
-	 *         responded to, false otherwise.
-	 */
-	public static boolean isIntentAvailable(Context context, String action) {
-		final PackageManager packageManager = context.getPackageManager();
-		final Intent intent = new Intent(action);
-		List<ResolveInfo> list =
-			packageManager.queryIntentActivities(intent,
-					PackageManager.MATCH_DEFAULT_ONLY);
-		return list.size() > 0;
-	}
+
+    private void ProcessText() {
+        //Show Dialog to get size of text
+        // drawView.setTextMode();
+        // et.setVisibility(View.INVISIBLE);
+        // et.setFocusable(true);
+    }
+
+    private void ProcessErase() {
+        //switch to erase - choose size
+        final Dialog brushDialog = new Dialog(this);
+        brushDialog.setTitle("Eraser size:");
+        brushDialog.setContentView(R.layout.brush_chooser);
+        ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
+        smallBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setErase(true);
+                drawView.setBrushSize(smallBrush);
+                brushDialog.dismiss();
+            }
+        });
+        ImageButton mediumBtn = (ImageButton)brushDialog.findViewById(R.id.medium_brush);
+        mediumBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setErase(true);
+                drawView.setBrushSize(mediumBrush);
+                brushDialog.dismiss();
+            }
+        });
+        ImageButton largeBtn = (ImageButton)brushDialog.findViewById(R.id.large_brush);
+        largeBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setErase(true);
+                drawView.setBrushSize(largeBrush);
+                brushDialog.dismiss();
+            }
+        });
+        brushDialog.show();
+    }
+
     private void ProcessSave() {
         //save drawing
         AlertDialog.Builder saveDialog = new AlertDialog.Builder(this);
@@ -397,9 +356,30 @@ public class MainActivity extends Activity implements OnClickListener {
         saveDialog.show();
     }
 
+    private void handleSelectedImage(Intent data){
+        Uri selectedImageUri = data.getData();
+        String[] projection = { MediaStore.MediaColumns.DATA };
+        Cursor cursor = managedQuery(selectedImageUri, projection, null, null,
+                null);
+        int column_index = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA);
+        cursor.moveToFirst();
+
+        String selectedImagePath = cursor.getString(column_index);
+        setPic(selectedImagePath);
+    }
+
+    private void handleBigCameraPhoto() {
+        if (mCurrentPhotoPath != null) {
+            Log.d(TAG, "handleBigCameraPhoto");
+            if (setPic(mCurrentPhotoPath) == true) {
+                galleryAddPic();
+            }
+        }
+    }
+
     private void SaveImage() {
         FileOutputStream fos=null;
-        Log.d(TAG, "SaveImage()- mCurrentPhotoPath: "+mCurrentPhotoPath);
+        Log.d(TAG, "SaveImage()- mCurrentPhotoPath: " + mCurrentPhotoPath);
         //in case of with out camera taken, no file is created
         if (mCurrentPhotoPath == null) {
             File f;
@@ -440,107 +420,6 @@ public class MainActivity extends Activity implements OnClickListener {
         drawView.destroyDrawingCache();
     }
 
-    private void ProcessNew() {
-        //new button
-        AlertDialog.Builder newDialog = new AlertDialog.Builder(this);
-        newDialog.setTitle("New drawing");
-        newDialog.setMessage("Start new drawing (you will lose the current drawing)?");
-        newDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener(){
-            public void onClick(DialogInterface dialog, int which){
-                drawView.startNew();
-                dialog.dismiss();
-            }
-        });
-        newDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int which){
-                dialog.cancel();
-            }
-        });
-        newDialog.show();
-    }
-
-    private void ProcessErase() {
-        //switch to erase - choose size
-        final Dialog brushDialog = new Dialog(this);
-        brushDialog.setTitle("Eraser size:");
-        brushDialog.setContentView(R.layout.brush_chooser);
-        ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
-        smallBtn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                drawView.setErase(true);
-                drawView.setBrushSize(smallBrush);
-                brushDialog.dismiss();
-            }
-        });
-        ImageButton mediumBtn = (ImageButton)brushDialog.findViewById(R.id.medium_brush);
-        mediumBtn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                drawView.setErase(true);
-                drawView.setBrushSize(mediumBrush);
-                brushDialog.dismiss();
-            }
-        });
-        ImageButton largeBtn = (ImageButton)brushDialog.findViewById(R.id.large_brush);
-        largeBtn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                drawView.setErase(true);
-                drawView.setBrushSize(largeBrush);
-                brushDialog.dismiss();
-            }
-        });
-        brushDialog.show();
-    }
-
-    private void ProcessText() {
-        //Show Dialog to get size of text
-        // drawView.setTextMode();
-        // et.setVisibility(View.INVISIBLE);
-        // et.setFocusable(true);
-    }
-
-    private void ProcessDraw() {
-        //draw button clicked
-        final Dialog brushDialog = new Dialog(this);
-        brushDialog.setTitle("Brush size:");
-        brushDialog.setContentView(R.layout.brush_chooser);
-        ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
-        smallBtn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                drawView.setBrushSize(smallBrush);
-                drawView.setLastBrushSize(smallBrush);
-                drawView.setErase(false);
-                brushDialog.dismiss();
-            }
-        });
-
-        ImageButton mediumBtn = (ImageButton)brushDialog.findViewById(R.id.medium_brush);
-        mediumBtn.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                drawView.setBrushSize(mediumBrush);
-                drawView.setLastBrushSize(mediumBrush);
-                drawView.setErase(false);
-                brushDialog.dismiss();
-            }
-        });
-
-        ImageButton largeBtn = (ImageButton)brushDialog.findViewById(R.id.large_brush);
-        largeBtn.setOnClickListener(new OnClickListener(){
-            @Override
-            public void onClick(View v) {
-                drawView.setBrushSize(largeBrush);
-                drawView.setLastBrushSize(largeBrush);
-                drawView.setErase(false);
-                brushDialog.dismiss();
-            }
-        });
-        brushDialog.show();
-    }
-
     public  void isStoragePermissionGranted(int REQ_CODE) {
         if (Build.VERSION.SDK_INT >= 23) {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -550,6 +429,8 @@ public class MainActivity extends Activity implements OnClickListener {
                     dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
                 } else if (REQ_CODE == REQUEST_EXTERNAL_STORAGE_IMG){
                     SaveImage();
+                } else if (REQ_CODE == REQUEST_EXTERNAL_STORAGE_GAL){
+                    setIntentGallery();
                 }
             } else {
                 Log.v(TAG, "Show Rationale");
@@ -565,6 +446,130 @@ public class MainActivity extends Activity implements OnClickListener {
         }
         else { //permission is automatically granted on sdk<23 upon installation
             Log.v(TAG,"Permission is granted due to SDK");
+        }
+    }
+    private File getAlbumDir() {
+        File storageDir = null;
+
+        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
+
+            storageDir = mAlbumStorageDirFactory.getAlbumStorageDir(getAlbumName());
+            Log.d(TAG, "getAlbumDir: "+storageDir);
+            if (storageDir != null) {
+                if (! storageDir.mkdirs()) {
+                    if (! storageDir.exists()){
+                        Log.d(TAG, "failed to create directory");
+                        return null;
+                    }
+                }
+            }
+
+        } else {
+            Log.d(TAG, "External storage is not mounted READ/WRITE.");
+        }
+
+        return storageDir;
+    }
+
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String imageFileName = JPEG_FILE_PREFIX + timeStamp + "_";
+        Log.d(TAG, "createImageFile: " + imageFileName);
+
+        File imageF = File.createTempFile(imageFileName, JPEG_FILE_SUFFIX, getAlbumDir());
+        mCurrentPhotoPath = imageF.getAbsolutePath();
+        return imageF;
+    }
+
+    //get path of image and set image at drawview as bitmap
+    private boolean setPic(String imgPath) {
+		/* There isn't enough memory to open up more than a couple camera photos */
+		/* So pre-scale the target bitmap into which the file is decoded */
+		/* Get the size``` of the ImageView */
+        if (imgPath == null) return false;
+
+        int targetW = drawView.getWidth();
+        int targetH = drawView.getHeight();
+
+		/* Get the size of the image */
+        BitmapFactory.Options bmOptions = new BitmapFactory.Options();
+        bmOptions.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(imgPath, bmOptions);
+
+        //in case of clear without taking photo
+        if (bmOptions.outMimeType == null) return false;
+
+        int photoW = bmOptions.outWidth;
+        int photoH = bmOptions.outHeight;
+
+		/* Figure out which way needs to be reduced less */
+        int scaleFactor = 1;
+        if ((targetW > 0) || (targetH > 0)) {
+            scaleFactor = Math.min(photoW/targetW, photoH/targetH);
+        }
+        Log.d(TAG, "Resizing targetW: "+targetW+ "photoW: "+photoW+"targetH"+targetH+ "photoH: "+photoH  );
+		/* Set bitmap options to scale the image decode target */
+        bmOptions.inJustDecodeBounds = false;
+        bmOptions.inSampleSize = scaleFactor;
+        bmOptions.inPurgeable = true;
+
+		/* Decode the JPEG file into a Bitmap */
+        Bitmap bitmap = BitmapFactory.decodeFile(imgPath, bmOptions);
+        drawView.setCanvasBitmap(bitmap);
+        return true;
+    }
+
+    private void galleryAddPic() {
+        Intent mediaScanIntent = new Intent("android.intent.action.MEDIA_SCANNER_SCAN_FILE");
+        File f = new File(mCurrentPhotoPath);
+        Uri contentUri = Uri.fromFile(f);
+        mediaScanIntent.setData(contentUri);
+        this.sendBroadcast(mediaScanIntent);
+        Log.d(TAG, "galleryAddPic: " + mCurrentPhotoPath);
+    }
+
+    private void dispatchTakePictureIntent(int actionCode) {
+        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        switch(actionCode) {
+            case ACTION_TAKE_PHOTO_B:
+
+                Log.i(TAG, "Now, REQUEST_EXTERNAL_STORAGE is granted ");
+                if (mCurrentPhotoPath == null) {
+                    File f;
+                    try {
+                        f = createImageFile();
+                        takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
+                        Log.d(TAG, "dispatchTakePictureIntent");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        f = null;
+                        mCurrentPhotoPath = null;
+                        Log.e(TAG, "dispatchTakePictureIntent something wrong!!");
+                    }
+                }
+
+                break;
+
+            default:
+                break;
+        } // switch
+
+        startActivityForResult(takePictureIntent, actionCode);
+    }
+
+    public void paintClicked(View view){
+        //use chosen color
+        if(view!=currPaint){
+            //update color
+            ImageButton imgView = (ImageButton)view;
+            String color = view.getTag().toString();
+            drawView.setColor(color);
+            imgView.setImageDrawable(getResources().getDrawable(R.drawable.paint_pressed));
+            currPaint.setImageDrawable(getResources().getDrawable(R.drawable.paint));
+            currPaint=(ImageButton)view;
+            drawView.setErase(false);
+            drawView.setBrushSize(drawView.getLastBrushSize());
         }
     }
 }
