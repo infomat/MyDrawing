@@ -17,6 +17,7 @@ import android.view.View;
  */
 
 public class DrawingView extends View {
+    private static final String TAG = "DrawingView";
     public enum DrawMode {DRAW, ERASE, TEXT};    //drawing path
     private Path drawPath;
     //drawing and canvas paint
@@ -31,7 +32,7 @@ public class DrawingView extends View {
 
     private float brushSize, lastBrushSize;
     private boolean erase=false;
-    private DrawMode drawMode = DrawMode.DRAW;;
+    private DrawMode drawMode = DrawMode.DRAW;
 
 
     public DrawingView(Context context, AttributeSet attrs){
@@ -67,7 +68,7 @@ public class DrawingView extends View {
             drawCanvas = new Canvas(canvasBitmap);
         }
 
-        Log.d("DrwaingView", "onSizeChanged: " + w + "," + h + "," + oldw + "," + oldh);
+        Log.d(TAG, "onSizeChanged: " + w + "," + h + "," + oldw + "," + oldh);
     }
 
     @Override
@@ -77,7 +78,7 @@ public class DrawingView extends View {
 
         canvas.drawBitmap(canvasBitmap, 0, 0, canvasPaint);
         canvas.drawPath(drawPath, drawPaint);
-        Log.d("DrwaingView", "onDraw");
+        Log.d(TAG, "onDraw");
 
 
 
@@ -97,30 +98,28 @@ public class DrawingView extends View {
         if (drawMode != DrawMode.TEXT) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
-                    Log.d("DrwaingView", "ACTION_DOWN");
+                    Log.d(TAG, "ACTION_DOWN");
                     drawPath.moveTo(touchX, touchY);
                     break;
                 case MotionEvent.ACTION_MOVE:
-                    Log.d("DrwaingView", "ACTION_MOVE");
+                    Log.d(TAG, "ACTION_MOVE");
                     drawPath.lineTo(touchX, touchY);
                     break;
                 case MotionEvent.ACTION_UP:
-                    Log.d("DrwaingView", "ACTION_UP");
+                    Log.d(TAG, "ACTION_UP");
                     drawCanvas.drawPath(drawPath, drawPaint);
                     drawPath.reset();
                     break;
                 default:
                     return false;
             }
-        } else {
-
         }
         invalidate();
         return true;
     }
 
     public void setCanvasBitmap(Bitmap bitmap) {
-        Log.d("DrwaingView", "setCanvasBitmap");
+        Log.d(TAG, "setCanvasBitmap");
         canvasBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
         drawCanvas = new Canvas(canvasBitmap);
         invalidate();

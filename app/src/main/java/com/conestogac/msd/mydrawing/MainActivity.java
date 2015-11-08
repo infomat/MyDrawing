@@ -1,7 +1,11 @@
 package com.conestogac.msd.mydrawing;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -15,29 +19,28 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
+import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.provider.MediaStore;
-import android.graphics.BitmapFactory;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
-import android.provider.MediaStore;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
-import android.view.View.OnClickListener;
-import android.widget.Toast;
 
 public class MainActivity extends Activity implements OnClickListener {
+    private static final String TAG = "MainActivity";
+    private static final int REQUEST_EXTERNAL_STORAGE =1;
+    private static String[] PERMISSIONS_EXT_STORAGE = {Manifest.permission.WRITE_EXTERNAL_STORAGE};
     private DrawingView drawView;
     private float smallBrush, mediumBrush, largeBrush;
     private ImageButton currPaint, cameraBtn, drawBtn, textBtn, eraseBtn, newBtn, saveBtn;
@@ -55,11 +58,13 @@ public class MainActivity extends Activity implements OnClickListener {
     private String getAlbumName() {
         return getString(R.string.album_name);
     }
+    private View curLayout;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        curLayout = findViewById(R.id.main_layout);
         smallBrush = getResources().getInteger(R.integer.small_size);
         mediumBrush = getResources().getInteger(R.integer.medium_size);
         largeBrush = getResources().getInteger(R.integer.large_size);
@@ -143,27 +148,27 @@ public class MainActivity extends Activity implements OnClickListener {
         switch (view.getId())
         {
             case R.id.draw_btn:
-                Log.d("Mainactivity", "drawbtn");
+                Log.d(TAG, "drawbtn");
                 ProcessDraw();
                 break;
             case R.id.text_btn:
-                Log.d("Mainactivity", "textbtn");
+                Log.d(TAG, "textbtn");
                 ProcessText();
                 break;
             case R.id.erase_btn:
-                Log.d("Mainactivity", "erasebtn");
+                Log.d(TAG, "erasebtn");
                 ProcessErase();
                 break;
             case R.id.new_btn:
-                Log.d("Mainactivity", "newbtn");
+                Log.d(TAG, "newbtn");
                 ProcessNew();
                 break;
             case R.id.camera_btn:
-                Log.d("Mainactivity", "camerabtn");
+                Log.d(TAG, "camerabtn");
                 takePhoto(view);
                 break;
             case R.id.save_btn:
-                Log.d("Mainactivity", "savebtn");
+                Log.d(TAG, "savebtn");
                 ProcessSave();
                 break;
             default:
@@ -173,9 +178,9 @@ public class MainActivity extends Activity implements OnClickListener {
 
     public void takePhoto(View view)
     {
-        dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+        isStoragePermissionGranted();
     }
-    
+
     public Bitmap toGrayscale(Bitmap bmpOriginal)
     {
         int width, height;
@@ -199,18 +204,18 @@ public class MainActivity extends Activity implements OnClickListener {
         if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
 
             storageDir = mAlbumStorageDirFactory.getAlbumStorageDir(getAlbumName());
-            Log.d("Mainactivity", "getAlbumDir: "+storageDir);
+            Log.d(TAG, "getAlbumDir: "+storageDir);
             if (storageDir != null) {
                 if (! storageDir.mkdirs()) {
                     if (! storageDir.exists()){
-                        Log.d("Mainactivity", "failed to create directory");
+                        Log.d(TAG, "failed to create directory");
                         return null;
                     }
                 }
             }
 
         } else {
-            Log.d("Mainactivity", "External storage is not mounted READ/WRITE.");
+            Log.d(TAG, "External storage is not mounted READ/WRITE.");
         }
 
         return storageDir;
@@ -220,22 +225,14 @@ public class MainActivity extends Activity implements OnClickListener {
 		// Create an image file name
 		String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
 		String imageFileName = JPEG_FILE_PREFIX + timeStamp + "_";
-        Log.d("Mainactivity", "createImageFile"+imageFileName);
-		File albumF = getAlbumDir();
-		File imageF = File.createTempFile(imageFileName, JPEG_FILE_SUFFIX, albumF);
+        Log.d(TAG, "createImageFile: "+imageFileName);
+
+		File imageF = File.createTempFile(imageFileName, JPEG_FILE_SUFFIX, getAlbumDir());
+        mCurrentPhotoPath = imageF.getAbsolutePath();
 		return imageF;
 	}
 
-	private File setUpPhotoFile() throws IOException {
-		
-		File f = createImageFile();
-		mCurrentPhotoPath = f.getAbsolutePath();
-		
-		return f;
-	}
-
-   private void setPic() {
-
+   private boolean setPic() {
 		/* There isn't enough memory to open up more than a couple camera photos */
 		/* So pre-scale the target bitmap into which the file is decoded */
 
@@ -247,6 +244,10 @@ public class MainActivity extends Activity implements OnClickListener {
 		BitmapFactory.Options bmOptions = new BitmapFactory.Options();
 		bmOptions.inJustDecodeBounds = true;
 		BitmapFactory.decodeFile(mCurrentPhotoPath, bmOptions);
+
+        //in case of clear without taking photo
+        if (bmOptions.outMimeType == null) return false;
+
 		int photoW = bmOptions.outWidth;
 		int photoH = bmOptions.outHeight;
 		
@@ -255,7 +256,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		if ((targetW > 0) || (targetH > 0)) {
 			scaleFactor = Math.min(photoW/targetW, photoH/targetH);	
 		}
-       Log.d("Mainactivity", "Resizing targetW: "+targetW+ "photoW: "+photoW+"targetH"+targetH+ "photoH: "+photoH  );
+       Log.d(TAG, "Resizing targetW: "+targetW+ "photoW: "+photoW+"targetH"+targetH+ "photoH: "+photoH  );
 		/* Set bitmap options to scale the image decode target */
 		bmOptions.inJustDecodeBounds = false;
 		bmOptions.inSampleSize = scaleFactor;
@@ -264,6 +265,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		/* Decode the JPEG file into a Bitmap */
 		Bitmap bitmap = BitmapFactory.decodeFile(mCurrentPhotoPath, bmOptions);
         drawView.setCanvasBitmap(bitmap);
+       return true;
 	}
 
     private void galleryAddPic() {
@@ -272,18 +274,18 @@ public class MainActivity extends Activity implements OnClickListener {
         Uri contentUri = Uri.fromFile(f);
         mediaScanIntent.setData(contentUri);
         this.sendBroadcast(mediaScanIntent);
-        Log.d("Mainactivity", "galleryAddPic: "+mCurrentPhotoPath);
+        Log.d(TAG, "galleryAddPic: " + mCurrentPhotoPath);
 	}
-     private void dispatchTakePictureIntent(int actionCode) {
+
+    private void dispatchTakePictureIntent(int actionCode) {
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
          switch(actionCode) {
             case ACTION_TAKE_PHOTO_B:
-            File f = null;
+            File f;
             try {
-                f = setUpPhotoFile();
-                mCurrentPhotoPath = f.getAbsolutePath();
-                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
-                Log.d("Mainactivity", "dispatchTakePictureIntent");
+                    f = createImageFile();
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
+                    Log.d(TAG, "dispatchTakePictureIntent");
             } catch (IOException e) {
                 e.printStackTrace();
                 f = null;
@@ -301,8 +303,8 @@ public class MainActivity extends Activity implements OnClickListener {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data)
     {
-        Log.d("Mainactivity", "onActivityResult");
-        Log.d("Mainactivity", "requestCode: "+requestCode+"resultCode: "+resultCode);
+        Log.d(TAG, "onActivityResult");
+        Log.d(TAG, "requestCode: " + requestCode + "resultCode: " + resultCode);
         if(requestCode == ACTION_TAKE_PHOTO_B) {
             handleBigCameraPhoto();
         }
@@ -317,10 +319,10 @@ public class MainActivity extends Activity implements OnClickListener {
 
 	private void handleBigCameraPhoto() {
 		if (mCurrentPhotoPath != null) {
-            Log.d("Mainactivity", "handleBigCameraPhoto");
-			setPic();
-			galleryAddPic();
-			mCurrentPhotoPath = null;
+            Log.d(TAG, "handleBigCameraPhoto");
+            if (setPic() == true) {
+                galleryAddPic();
+            }
 		}
 	}
     
@@ -328,7 +330,7 @@ public class MainActivity extends Activity implements OnClickListener {
 	@Override
 	protected void onSaveInstanceState(Bundle outState) {
 		outState.putParcelable(BITMAP_STORAGE_KEY, mImageBitmap);
-		outState.putBoolean(IMAGEVIEW_VISIBILITY_STORAGE_KEY, (mImageBitmap != null) );
+		outState.putBoolean(IMAGEVIEW_VISIBILITY_STORAGE_KEY, (mImageBitmap != null));
 		super.onSaveInstanceState(outState);
 	}
 
@@ -342,6 +344,25 @@ public class MainActivity extends Activity implements OnClickListener {
                         ImageView.VISIBLE : ImageView.INVISIBLE
         );
 	}
+    //Form Marshmallow, External Storage Permission si not possible to use at manifest file
+    //So, runtime requesting user grant for permission will be done, and then this callback will be called
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        Log.d(TAG, "onRequestPermissionsResult");
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_EXTERNAL_STORAGE) {
+            if (grantResults.length == 1 &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.i(TAG,"Now, REQUEST_EXTERNAL_STORAGE is granted ");
+                dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+            } else {
+                Snackbar.make(curLayout, R.string.permission_extsto_nok,
+                        Snackbar.LENGTH_SHORT).show();
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+    }
 /**
 	 * Indicates whether the specified action can be used as an intent. This
 	 * method queries the package manager for installed packages that can
@@ -373,8 +394,11 @@ public class MainActivity extends Activity implements OnClickListener {
                 //save drawing
                 drawView.setDrawingCacheEnabled(true);
                 String imgSaved = MediaStore.Images.Media.insertImage(
-                        getContentResolver(), drawView.getDrawingCache(),
-                        UUID.randomUUID().toString()+".png", "drawing");
+                    getContentResolver(), drawView.getDrawingCache(),
+                        mCurrentPhotoPath , "drawing");
+//                String imgSaved = MediaStore.Images.Media.insertImage(
+//                        getContentResolver(), drawView.getDrawingCache(),
+//                        UUID.randomUUID().toString()+".png", "drawing");
                 if(imgSaved!=null){
                     Toast savedToast = Toast.makeText(getApplicationContext(),
                             "Drawing saved to Gallery!", Toast.LENGTH_SHORT);
@@ -406,7 +430,7 @@ public class MainActivity extends Activity implements OnClickListener {
                 dialog.dismiss();
             }
         });
-        newDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener(){
+        newDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which){
                 dialog.cancel();
             }
@@ -420,7 +444,7 @@ public class MainActivity extends Activity implements OnClickListener {
         brushDialog.setTitle("Eraser size:");
         brushDialog.setContentView(R.layout.brush_chooser);
         ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
-        smallBtn.setOnClickListener(new OnClickListener(){
+        smallBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
                 drawView.setErase(true);
@@ -494,5 +518,28 @@ public class MainActivity extends Activity implements OnClickListener {
             }
         });
         brushDialog.show();
+    }
+
+    public  void isStoragePermissionGranted() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                Log.v(TAG,"Permission is already granted");
+                dispatchTakePictureIntent(ACTION_TAKE_PHOTO_B);
+            } else {
+                Log.v(TAG, "Show Rationale");
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                    Log.i(TAG, "Displaying external storage permission rationale to provide additional context.");
+                    ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQUEST_EXTERNAL_STORAGE);
+                } else {
+                    Log.v(TAG, "Permission is revoked");
+                    ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQUEST_EXTERNAL_STORAGE);
+                }
+            }
+        }
+        else { //permission is automatically granted on sdk<23 upon installation
+            Log.v(TAG,"Permission is granted due to SDK");
+        }
     }
 }

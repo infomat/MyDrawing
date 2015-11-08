@@ -14,4 +14,8 @@
     <string name="sml">Small</string>
     <string name="med">Medium</string>
     <string name="lrg">Large</string>
+    <string name="permission_extsto_rationale">Permission for External Storage is required</string>
+    <string name="permission_extsto_ok">Permission for External Storage is granted</string>
+    <string name="permission_extsto_nok">Permission for External Storage is not granted</string>
+    <string name="ok">OK</string>
 </resources>
