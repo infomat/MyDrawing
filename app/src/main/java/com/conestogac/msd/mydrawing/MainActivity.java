@@ -17,10 +17,12 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
+import android.text.InputType;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -39,16 +41,17 @@ public class MainActivity extends Activity implements OnClickListener {
     private static final int REQUEST_EXTERNAL_STORAGE_IMG = 1;
     private static final int REQUEST_EXTERNAL_STORAGE_GAL = 2;
     private static String[] PERMISSIONS_EXT_STORAGE = {Manifest.permission.WRITE_EXTERNAL_STORAGE};
+
+    private static final int ACTION_TAKE_PHOTO_B = 1;
+    private static final int ACTION_SELECT_IMAGE = 2;
+
+    private View curLayout;
     private DrawingView drawView;
     private float smallBrush, mediumBrush, largeBrush;
     private ImageButton currPaint, cameraBtn, drawBtn, textBtn, eraseBtn, newBtn, saveBtn;
     //final EditText et = (EditText) findViewById(R.id.ed_text);
     private static final String JPEG_FILE_PREFIX = "IMG_";
     private static final String JPEG_FILE_SUFFIX = ".jpg";
-
-    private static final int ACTION_TAKE_PHOTO_B = 1;
-    private static final int ACTION_SELECT_IMAGE = 2;
-
     private static final String BITMAP_STORAGE_KEY = "viewbitmap";
     private static final String IMAGEVIEW_VISIBILITY_STORAGE_KEY = "imageviewvisibility";
     private ImageView mImageView;
@@ -58,7 +61,8 @@ public class MainActivity extends Activity implements OnClickListener {
     private String getAlbumName() {
         return getString(R.string.album_name);
     }
-    private View curLayout;
+    private String m_Text = "";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,22 +81,6 @@ public class MainActivity extends Activity implements OnClickListener {
 		} else {
 			mAlbumStorageDirFactory = new BaseAlbumDirFactory();
 		}
-//        et.addTextChangedListener(new TextWatcher() {
-//            @Override
-//            public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-//
-//            }
-//
-//            @Override
-//            public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
-//                drawView.writeText(et.getText().toString());
-//            }
-//
-//            @Override
-//            public void afterTextChanged(Editable editable) {
-//
-//            }
-//        });
 
         LinearLayout paintLayout = (LinearLayout)findViewById(R.id.paint_colors);
         currPaint = (ImageButton)paintLayout.getChildAt(0);
@@ -127,6 +115,14 @@ public class MainActivity extends Activity implements OnClickListener {
         return super.onOptionsItemSelected(item);
     }
 
+    protected void onStop(Bundle savedInstanceState){
+        //Todo
+        //Clear Temporary File
+    }
+
+    protected void onPause(Bundle savedInstanceState){
+        //Clear Temporary File
+    }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data)
@@ -222,15 +218,15 @@ public class MainActivity extends Activity implements OnClickListener {
     private void ProcessNew() {
         //new button
         AlertDialog.Builder newDialog = new AlertDialog.Builder(this);
-        newDialog.setTitle("New drawing");
-        newDialog.setMessage("Start new drawing (you will lose the current drawing)?");
-        newDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener(){
+        newDialog.setTitle(R.string.newdrawing);
+        newDialog.setMessage(R.string.noticenewdaing);
+        newDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener(){
             public void onClick(DialogInterface dialog, int which){
                 drawView.startNew();
                 dialog.dismiss();
             }
         });
-        newDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+        newDialog.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();
             }
@@ -255,7 +251,7 @@ public class MainActivity extends Activity implements OnClickListener {
     private void ProcessDraw() {
         //draw button clicked
         final Dialog brushDialog = new Dialog(this);
-        brushDialog.setTitle("Brush size:");
+        brushDialog.setTitle(R.string.brushsize);
         brushDialog.setContentView(R.layout.brush_chooser);
         ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
         smallBtn.setOnClickListener(new OnClickListener() {
@@ -293,16 +289,38 @@ public class MainActivity extends Activity implements OnClickListener {
     }
 
     private void ProcessText() {
-        //Show Dialog to get size of text
-        // drawView.setTextMode();
-        // et.setVisibility(View.INVISIBLE);
-        // et.setFocusable(true);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(R.string.inputtext);
+
+    // Set up the input
+        final EditText input = new EditText(this);
+    // Specify the type of input expected; this, for example, sets the input as a password, and will mask the text
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        builder.setView(input);
+
+    // Set up the buttons
+        builder.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                m_Text = input.getText().toString();
+                Snackbar.make(curLayout, R.string.selectpos,
+                        Snackbar.LENGTH_LONG).show();
+            }
+        });
+        builder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+
+        builder.show();
     }
 
     private void ProcessErase() {
         //switch to erase - choose size
         final Dialog brushDialog = new Dialog(this);
-        brushDialog.setTitle("Eraser size:");
+        brushDialog.setTitle(R.string.erasersize);
         brushDialog.setContentView(R.layout.brush_chooser);
         ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
         smallBtn.setOnClickListener(new OnClickListener() {
@@ -337,9 +355,9 @@ public class MainActivity extends Activity implements OnClickListener {
     private void ProcessSave() {
         //save drawing
         AlertDialog.Builder saveDialog = new AlertDialog.Builder(this);
-        saveDialog.setTitle("Save drawing");
-        saveDialog.setMessage("Save drawing to device Gallery?");
-        saveDialog.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+        saveDialog.setTitle(R.string.savedrawing);
+        saveDialog.setMessage(R.string.noticesave);
+        saveDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
                 //In case of no camera image exists -> obtain permission & make new file
                 if (mCurrentPhotoPath == null) {
@@ -348,7 +366,7 @@ public class MainActivity extends Activity implements OnClickListener {
                     SaveImage();
                 }
             }
-        }).setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+        }).setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();
             }

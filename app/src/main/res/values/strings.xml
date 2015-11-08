@@ -15,8 +15,17 @@
     <string name="sml">Small</string>
     <string name="med">Medium</string>
     <string name="lrg">Large</string>
+    <string name="brushsize">Brush size:</string>
+    <string name="erasersize">Eraser size:</string>
+    <string name="savedrawing">Save drawing</string>
     <string name="permission_extsto_rationale">Permission for External Storage is required</string>
     <string name="permission_extsto_ok">Permission for External Storage is granted</string>
     <string name="permission_extsto_nok">Permission for External Storage is not granted</string>
     <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="inputtext">Input Text to Insert</string>
+    <string name="selectpos">Touch to Insert Text</string>
+    <string name="newdrawing">New drawing</string>
+    <string name="noticenewdaing">Start new drawing (you will lose the current drawing)?</string>
+    <string name="noticesave">Save drawing to device Gallery?</string>
 </resources>
