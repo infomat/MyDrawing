@@ -132,6 +132,7 @@ public class DrawingView extends View {
     public void setTextMode(){
         this.drawMode = DrawMode.TEXT;
     }
+
     public DrawMode getMode() {return this.drawMode; }
     public void setText(String text) {
         this.text2Display = text;
@@ -147,11 +148,13 @@ public class DrawingView extends View {
         paintColor = Color.parseColor(newColor);
         drawPaint.setColor(paintColor);
     }
+
     public void setBrushSize(float newSize){
 //update size
         float pixelAmount = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
                 newSize, getResources().getDisplayMetrics());
         brushSize = pixelAmount;
+        drawPaint.setStyle(Paint.Style.STROKE);
         drawPaint.setStrokeWidth(brushSize);
     }
     public void setLastBrushSize(float lastSize){
