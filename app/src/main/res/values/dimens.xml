@@ -8,6 +8,10 @@
     <dimen name="medium_brush">20dp</dimen>
     <integer name="medium_size">20</integer>
     <dimen name="large_brush">30dp</dimen>
+    <dimen name="bw_height">100dp</dimen>
     <integer name="large_size">30</integer>
     <dimen name="camera">300dp</dimen>
+    <integer name="large_text_size">200</integer>
+    <integer name="medium_text_size">100</integer>
+    <integer name="small_text_size">40</integer>
 </resources>

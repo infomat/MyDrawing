@@ -48,6 +48,7 @@ public class MainActivity extends Activity implements OnClickListener {
     private View curLayout;
     private DrawingView drawView;
     private float smallBrush, mediumBrush, largeBrush;
+    private int smallText, mediumText, largeText;
     private ImageButton currPaint, cameraBtn, drawBtn, textBtn, eraseBtn, newBtn, saveBtn;
     //final EditText et = (EditText) findViewById(R.id.ed_text);
     private static final String JPEG_FILE_PREFIX = "IMG_";
@@ -72,6 +73,11 @@ public class MainActivity extends Activity implements OnClickListener {
         smallBrush = getResources().getInteger(R.integer.small_size);
         mediumBrush = getResources().getInteger(R.integer.medium_size);
         largeBrush = getResources().getInteger(R.integer.large_size);
+
+        smallText = getResources().getInteger(R.integer.small_text_size);
+        mediumText = getResources().getInteger(R.integer.medium_text_size);
+        largeText = getResources().getInteger(R.integer.large_text_size);
+
         drawView = (DrawingView)findViewById(R.id.drawing);
         drawView.setBrushSize(mediumBrush);
         mImageBitmap = null;
@@ -116,12 +122,13 @@ public class MainActivity extends Activity implements OnClickListener {
     }
 
     protected void onStop(Bundle savedInstanceState){
-        //Todo
-        //Clear Temporary File
-    }
-
-    protected void onPause(Bundle savedInstanceState){
-        //Clear Temporary File
+        //Clear or Save Temporary File
+        super.onStop();
+        if (isFinishing()) {
+            DeleteTempFile();
+        } else {
+            SaveImage();
+        }
     }
 
     @Override
@@ -133,7 +140,9 @@ public class MainActivity extends Activity implements OnClickListener {
             handleBigCameraPhoto();
         } else if (requestCode == ACTION_SELECT_IMAGE) {
             Log.d(TAG, "From Gallery");
-            handleSelectedImage(data);
+            if (data != null) {
+                handleSelectedImage(data);
+            }
         }
     }
 
@@ -200,7 +209,11 @@ public class MainActivity extends Activity implements OnClickListener {
                 break;
             case R.id.text_btn:
                 Log.d(TAG, "textbtn");
-                ProcessText();
+                ChooseTextSize();
+            break;
+            case R.id.bw_btn:
+                Log.d(TAG, "bwbtn");
+                toGrayScale();
                 break;
             case R.id.erase_btn:
                 Log.d(TAG, "erasebtn");
@@ -240,7 +253,21 @@ public class MainActivity extends Activity implements OnClickListener {
     }
 
     public void gotoGallery(View v) {
-        isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_GAL);
+        AlertDialog.Builder saveDialog = new AlertDialog.Builder(this);
+        saveDialog.setTitle(R.string.warning);
+        saveDialog.setMessage(R.string.noticegallery);
+        saveDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                //In case of no camera image exists -> obtain permission & make new file
+                isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_GAL);
+            }
+        }).setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+        saveDialog.show();
+
     }
     private void setIntentGallery(){
         Intent goGalleryIntent = new Intent(Intent.ACTION_PICK);
@@ -288,33 +315,61 @@ public class MainActivity extends Activity implements OnClickListener {
         brushDialog.show();
     }
 
-    private void ProcessText() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(R.string.inputtext);
+    private void ChooseTextSize() {
+        //draw button clicked
+        final Dialog textDialog = new Dialog(this);
+        textDialog.setTitle(R.string.textsize);
+        textDialog.setContentView(R.layout.text_chooser);
 
-    // Set up the input
-        final EditText input = new EditText(this);
-    // Specify the type of input expected; this, for example, sets the input as a password, and will mask the text
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-        builder.setView(input);
 
-    // Set up the buttons
-        builder.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+        ImageButton smallBtn = (ImageButton)textDialog.findViewById(R.id.imageButton_s);
+        smallBtn.setOnClickListener(new OnClickListener() {
             @Override
-            public void onClick(DialogInterface dialog, int which) {
-                m_Text = input.getText().toString();
-                Snackbar.make(curLayout, R.string.selectpos,
-                        Snackbar.LENGTH_LONG).show();
+            public void onClick(View v) {
+                drawView.setTextSize(smallText);
+                textDialog.dismiss();
+                GetText();
             }
         });
-        builder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+
+        ImageButton mediumBtn = (ImageButton)textDialog.findViewById(R.id.imageButton_m);
+        mediumBtn.setOnClickListener(new OnClickListener() {
             @Override
+            public void onClick(View v) {
+                drawView.setTextSize(mediumText);
+                textDialog.dismiss();
+                GetText();
+            }
+        });
+
+        ImageButton largeBtn = (ImageButton)textDialog.findViewById(R.id.imageButton_l);
+        largeBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawView.setTextSize(largeText);
+                textDialog.dismiss();
+                GetText();
+            }
+        });
+        textDialog.show();
+    }
+
+    private void toGrayScale() {
+        AlertDialog.Builder newDialog = new AlertDialog.Builder(this);
+        newDialog.setTitle(R.string.warning);
+        newDialog.setMessage(R.string.noticebw);
+        newDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener(){
+            public void onClick(DialogInterface dialog, int which){
+                drawView.Change2Grayscale();
+                dialog.dismiss();
+            }
+        });
+        newDialog.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();
             }
         });
-
-        builder.show();
+        newDialog.show();
     }
 
     private void ProcessErase() {
@@ -322,7 +377,7 @@ public class MainActivity extends Activity implements OnClickListener {
         final Dialog brushDialog = new Dialog(this);
         brushDialog.setTitle(R.string.erasersize);
         brushDialog.setContentView(R.layout.brush_chooser);
-        ImageButton smallBtn = (ImageButton)brushDialog.findViewById(R.id.small_brush);
+        ImageButton smallBtn = (ImageButton) brushDialog.findViewById(R.id.small_brush);
         smallBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -331,7 +386,7 @@ public class MainActivity extends Activity implements OnClickListener {
                 brushDialog.dismiss();
             }
         });
-        ImageButton mediumBtn = (ImageButton)brushDialog.findViewById(R.id.medium_brush);
+        ImageButton mediumBtn = (ImageButton) brushDialog.findViewById(R.id.medium_brush);
         mediumBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -340,7 +395,7 @@ public class MainActivity extends Activity implements OnClickListener {
                 brushDialog.dismiss();
             }
         });
-        ImageButton largeBtn = (ImageButton)brushDialog.findViewById(R.id.large_brush);
+        ImageButton largeBtn = (ImageButton) brushDialog.findViewById(R.id.large_brush);
         largeBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -359,12 +414,12 @@ public class MainActivity extends Activity implements OnClickListener {
         saveDialog.setMessage(R.string.noticesave);
         saveDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
-                //In case of no camera image exists -> obtain permission & make new file
-                if (mCurrentPhotoPath == null) {
-                    isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_IMG);
-                } else {
-                    SaveImage();
-                }
+            //In case of no camera image exists -> obtain permission & make new file
+            if (mCurrentPhotoPath == null) {
+                isStoragePermissionGranted(REQUEST_EXTERNAL_STORAGE_IMG);
+            } else {
+                SaveImage();
+            }
             }
         }).setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int which) {
@@ -392,6 +447,14 @@ public class MainActivity extends Activity implements OnClickListener {
             if (setPic(mCurrentPhotoPath) == true) {
                 galleryAddPic();
             }
+        }
+    }
+
+    private void DeleteTempFile() {
+        if (mCurrentPhotoPath != null) {
+            File fos = new File(mCurrentPhotoPath);
+            fos.delete();
+            Log.d(TAG, "DeleteTempFile()");
         }
     }
 
@@ -423,19 +486,48 @@ public class MainActivity extends Activity implements OnClickListener {
                     "Drawing saved to Gallery!", Toast.LENGTH_SHORT);
             savedToast.show();
         } catch (FileNotFoundException e) {
-            // TODO Auto-generated catch block
             Toast unsavedToast = Toast.makeText(getApplicationContext(),
                     "Oops! Image could not be saved.", Toast.LENGTH_SHORT);
             unsavedToast.show();
             e.printStackTrace();
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             Toast unsavedToast = Toast.makeText(getApplicationContext(),
                     "Oops! Image could not be saved.", Toast.LENGTH_SHORT);
             unsavedToast.show();
             e.printStackTrace();
         }
         drawView.destroyDrawingCache();
+    }
+
+    private void GetText() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(R.string.inputtext);
+
+        // Set up the input
+        final EditText input = new EditText(this);
+        // Specify the type of input expected; this, for example, sets the input as a password, and will mask the text
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        builder.setView(input);
+
+        // Set up the buttons
+        builder.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                m_Text = input.getText().toString();
+                Snackbar.make(curLayout, R.string.selectpos,
+                        Snackbar.LENGTH_LONG).show();
+                drawView.setTextMode();
+                drawView.setText(m_Text.toString());
+            }
+        });
+        builder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+
+        builder.show();
     }
 
     public  void isStoragePermissionGranted(int REQ_CODE) {
@@ -461,9 +553,8 @@ public class MainActivity extends Activity implements OnClickListener {
                     ActivityCompat.requestPermissions(this,PERMISSIONS_EXT_STORAGE , REQ_CODE);
                 }
             }
-        }
-        else { //permission is automatically granted on sdk<23 upon installation
-            Log.v(TAG,"Permission is granted due to SDK");
+        } else { //permission is automatically granted on sdk<23 upon installation
+            Log.v(TAG, "Permission is granted due to SDK");
         }
     }
     private File getAlbumDir() {
@@ -553,18 +644,24 @@ public class MainActivity extends Activity implements OnClickListener {
             case ACTION_TAKE_PHOTO_B:
 
                 Log.i(TAG, "Now, REQUEST_EXTERNAL_STORAGE is granted ");
-                if (mCurrentPhotoPath == null) {
-                    File f;
-                    try {
+
+                File f;
+                try {
+                    if (mCurrentPhotoPath == null) {
+                        Log.d(TAG, "Create New Temp File");
                         f = createImageFile();
-                        takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
-                        Log.d(TAG, "dispatchTakePictureIntent");
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        f = null;
-                        mCurrentPhotoPath = null;
-                        Log.e(TAG, "dispatchTakePictureIntent something wrong!!");
+                    } else {
+                        Log.d(TAG, "Reuse Temp File");
+                        f = new File(mCurrentPhotoPath);
                     }
+
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
+                    Log.d(TAG, "dispatchTakePictureIntent");
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    f = null;
+                    mCurrentPhotoPath = null;
+                    Log.e(TAG, "dispatchTakePictureIntent something wrong!!");
                 }
 
                 break;
@@ -586,8 +683,11 @@ public class MainActivity extends Activity implements OnClickListener {
             imgView.setImageDrawable(getResources().getDrawable(R.drawable.paint_pressed));
             currPaint.setImageDrawable(getResources().getDrawable(R.drawable.paint));
             currPaint=(ImageButton)view;
-            drawView.setErase(false);
-            drawView.setBrushSize(drawView.getLastBrushSize());
+            if (drawView.getMode() != DrawingView.DrawMode.TEXT) {
+                drawView.setErase(false);
+                drawView.setBrushSize(drawView.getLastBrushSize());
+            }
         }
     }
+
 }
