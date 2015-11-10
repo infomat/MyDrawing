@@ -109,6 +109,7 @@ public class DrawingView extends View {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     drawPath.reset();
+                    drawPaint.setColor(paintColor);
                     drawPaint.setStyle(Paint.Style.FILL);
                     drawPaint.setStrokeWidth(brushSize/10+1);
                     drawPaint.setTextSize(textSize);
@@ -176,8 +177,6 @@ public class DrawingView extends View {
             drawMode = DrawMode.DRAW;
         }
 
-  //      if(erase) drawPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-  //      else drawPaint.setXfermode(null);
     }
     public void startNew(){
         drawCanvas.drawARGB(0xff, 0xff, 0xff, 0xff);
@@ -186,7 +185,7 @@ public class DrawingView extends View {
         invalidate();
     }
 
-    public void Change2Grayscale()
+    public void change2Grayscale()
     {
         Paint bwPaint = new Paint();
         ColorMatrix cm = new ColorMatrix();

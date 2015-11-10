@@ -121,14 +121,12 @@ public class MainActivity extends Activity implements OnClickListener {
         return super.onOptionsItemSelected(item);
     }
 
-    protected void onStop(Bundle savedInstanceState){
+    protected void onPause(){
         //Clear or Save Temporary File
-        super.onStop();
+        super.onPause();
         if (isFinishing()) {
             DeleteTempFile();
-        } else {
-            SaveImage();
-        }
+        } 
     }
 
     @Override
@@ -236,6 +234,8 @@ public class MainActivity extends Activity implements OnClickListener {
         newDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener(){
             public void onClick(DialogInterface dialog, int which){
                 drawView.startNew();
+                mCurrentPhotoPath = null; //to make new file
+
                 dialog.dismiss();
             }
         });
@@ -270,9 +270,10 @@ public class MainActivity extends Activity implements OnClickListener {
 
     }
     private void setIntentGallery(){
+        Uri contentUri = Uri.fromFile(getAlbumDir());
         Intent goGalleryIntent = new Intent(Intent.ACTION_PICK);
-        goGalleryIntent.setType(android.provider.MediaStore.Images.Media.CONTENT_TYPE);
-        goGalleryIntent.setData(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+
+        goGalleryIntent.setDataAndType(contentUri, "image/*");
         startActivityForResult(Intent.createChooser(goGalleryIntent, "Select File"), ACTION_SELECT_IMAGE);
     }
     private void ProcessDraw() {
@@ -360,7 +361,7 @@ public class MainActivity extends Activity implements OnClickListener {
         newDialog.setMessage(R.string.noticebw);
         newDialog.setPositiveButton(R.string.ok, new DialogInterface.OnClickListener(){
             public void onClick(DialogInterface dialog, int which){
-                drawView.Change2Grayscale();
+                drawView.change2Grayscale();
                 dialog.dismiss();
             }
         });
@@ -451,10 +452,10 @@ public class MainActivity extends Activity implements OnClickListener {
     }
 
     private void DeleteTempFile() {
+        Log.d(TAG, "DeleteTempFile()"+mCurrentPhotoPath);
         if (mCurrentPhotoPath != null) {
             File fos = new File(mCurrentPhotoPath);
             fos.delete();
-            Log.d(TAG, "DeleteTempFile()");
         }
     }
 
@@ -515,7 +516,7 @@ public class MainActivity extends Activity implements OnClickListener {
             public void onClick(DialogInterface dialog, int which) {
                 m_Text = input.getText().toString();
                 Snackbar.make(curLayout, R.string.selectpos,
-                        Snackbar.LENGTH_LONG).show();
+                        Snackbar.LENGTH_SHORT).show();
                 drawView.setTextMode();
                 drawView.setText(m_Text.toString());
             }
