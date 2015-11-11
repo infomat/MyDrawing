@@ -124,9 +124,12 @@ public class MainActivity extends Activity implements OnClickListener {
     protected void onPause(){
         //Clear or Save Temporary File
         super.onPause();
-        if (isFinishing()) {
-            DeleteTempFile();
-        } 
+     //Todo When exit, it should be checked whether it is saved file or temp file. if it is temp file, it should be deleted
+        //New -> Temp file, Save -> Real file, Exit -> Delete Temp file
+        //If uesr select Overwrite, user same file or make new file
+     //   if (isFinishing()) {
+     //       DeleteTempFile();
+     //   }
     }
 
     @Override
